@@ -14,7 +14,7 @@ Sharp Viewer is a specialized 3D viewer designed to render and analyze Gaussian 
 ## Prerequisites
 -   **Python 3.10+**
 -   **Node.js 18+**
--   **ComfyUI** (Optional, for the generation pipeline)
+-   **ComfyUI** (Important: this is where the project runs)
 
 ## Installation
 
