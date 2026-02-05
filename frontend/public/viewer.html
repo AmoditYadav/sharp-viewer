@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Gaussian Splat Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0f172a;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        #viewerContainer {
+            position: relative;
+            flex: 1;
+            min-height: 0;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #64748b;
+        }
+
+        .loading .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #1e293b;
+            border-top-color: #14b8a6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .error {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #ef4444;
+            padding: 20px;
+            max-width: 80%;
+        }
+
+        .error.hidden,
+        .loading.hidden {
+            display: none;
+        }
+
+        .info-panel {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 12px;
+            border-radius: 4px;
+            color: #94a3b8;
+            font-size: 11px;
+            z-index: 50;
+        }
+
+        .info-panel.hidden {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="viewerContainer">
+        <canvas id="canvas"></canvas>
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <div>Loading 3D model...</div>
+        </div>
+        <div id="error" class="error hidden"></div>
+        <div id="infoPanel" class="info-panel hidden"></div>
+    </div>
+
+    <!-- Load bundled gsplat.js (same as comfyui-PlyPreview) -->
+    <script src="./gsplat-bundle.js"></script>
+
+    <script>
+        // Use the globally exported GSPLAT from bundle
+        const SPLAT = window.GSPLAT;
+
+        const canvas = document.getElementById('canvas');
+        const loadingEl = document.getElementById('loading');
+        const errorEl = document.getElementById('error');
+        const infoPanel = document.getElementById('infoPanel');
+
+        // Make canvas focusable for keyboard controls
+        canvas.tabIndex = 0;
+        canvas.style.outline = "none";
+        canvas.addEventListener('pointerdown', () => canvas.focus({ preventScroll: true }));
+
+        let scene = null;
+        let camera = null;
+        let renderer = null;
+        let controls = null;
+        let animationId = null;
+        let currentSplat = null;
+        const DEFAULT_SCALE = 10.0;
+
+        // Initialize viewer
+        function initViewer() {
+            try {
+                if (!SPLAT) {
+                    throw new Error('gsplat.js not loaded');
+                }
+
+                scene = new SPLAT.Scene();
+                camera = new SPLAT.Camera();
+                renderer = new SPLAT.WebGLRenderer(canvas);
+                controls = new SPLAT.OrbitControls(camera, canvas);
+
+                // Set default focal length
+                camera.data.fx = 30;
+                camera.data.fy = 30;
+
+                // Handle resize
+                const resize = () => {
+                    renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+                };
+                window.addEventListener('resize', resize);
+                resize();
+
+                // Start render loop
+                const frame = () => {
+                    controls.update();
+                    renderer.render(scene, camera);
+                    animationId = requestAnimationFrame(frame);
+                };
+                frame();
+
+                console.log('[Viewer] Initialized gsplat.js');
+
+                // Signal ready
+                window.parent.postMessage({ type: 'READY' }, '*');
+            } catch (err) {
+                console.error('[Viewer] Init error:', err);
+                showError('Failed to initialize WebGL: ' + err.message);
+            }
+        }
+
+        function showError(message) {
+            loadingEl.classList.add('hidden');
+            errorEl.textContent = message;
+            errorEl.classList.remove('hidden');
+        }
+
+        function showLoading() {
+            errorEl.classList.add('hidden');
+            loadingEl.classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            loadingEl.classList.add('hidden');
+        }
+
+        // Load PLY from URL
+        async function loadPLY(url) {
+            if (!scene) {
+                console.error('[Viewer] Scene not initialized');
+                return;
+            }
+
+            showLoading();
+            console.log('[Viewer] Loading PLY from:', url);
+
+            try {
+                // Clear existing objects
+                while (scene.objects && scene.objects.length > 0) {
+                    scene.removeObject(scene.objects[0]);
+                }
+                currentSplat = null;
+
+                // Load PLY using gsplat's PLYLoader
+                await SPLAT.PLYLoader.LoadAsync(url, scene);
+
+                // Get the loaded splat
+                if (scene.objects && scene.objects.length > 0) {
+                    currentSplat = scene.objects[scene.objects.length - 1];
+
+                    // Apply scale multiplier for better visibility
+                    if (currentSplat.data && currentSplat.data.scales) {
+                        const scales = currentSplat.data.scales;
+                        for (let i = 0; i < scales.length; i++) {
+                            scales[i] *= DEFAULT_SCALE;
+                        }
+                        currentSplat.data.changed = true;
+                        console.log('[Viewer] Applied scale:', DEFAULT_SCALE);
+                    }
+
+                    // Log info
+                    if (currentSplat.bounds) {
+                        const center = currentSplat.bounds.center();
+                        const size = currentSplat.bounds.size();
+                        console.log('[Viewer] Bounds center:', center.x, center.y, center.z);
+                        console.log('[Viewer] Bounds size:', size.x, size.y, size.z);
+                    }
+                }
+
+                // Set camera to view the scene
+                camera.position.x = 0;
+                camera.position.y = 0;
+                camera.position.z = 3;
+                controls.update();
+
+                hideLoading();
+                infoPanel.classList.remove('hidden');
+                infoPanel.innerHTML = '<span style="color:#14b8a6">Gaussian Splat Loaded</span>';
+
+                // Notify parent
+                window.parent.postMessage({ type: 'LOADED', url: url }, '*');
+                console.log('[Viewer] Loaded successfully');
+
+            } catch (err) {
+                console.error('[Viewer] Load error:', err);
+                showError('Failed to load: ' + err.message);
+                window.parent.postMessage({ type: 'ERROR', error: err.message }, '*');
+            }
+        }
+
+        // Expose loadPLY globally
+        window.loadPLY = loadPLY;
+
+        // Listen for messages from parent
+        window.addEventListener('message', (event) => {
+            const data = event.data;
+            if (data && data.type === 'LOAD_PLY' && data.url) {
+                loadPLY(data.url);
+            }
+        });
+
+        // Check URL params for direct loading
+        const params = new URLSearchParams(window.location.search);
+        const plyUrl = params.get('url');
+
+        // Initialize when DOM ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                initViewer();
+                if (plyUrl) loadPLY(plyUrl);
+                else hideLoading();
+            });
+        } else {
+            initViewer();
+            if (plyUrl) loadPLY(plyUrl);
+            else hideLoading();
+        }
+    </script>
+</body>
+
+</html>

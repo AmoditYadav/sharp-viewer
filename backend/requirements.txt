@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+numpy
+pillow
+requests
+python-multipart
+plyfile
+scipy
+open3d

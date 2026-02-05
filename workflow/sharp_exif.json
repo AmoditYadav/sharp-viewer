@@ -1,0 +1,64 @@
+{
+  "2": {
+    "inputs": {
+      "device": "auto",
+      "checkpoint_path": ""
+    },
+    "class_type": "LoadSharpModel",
+    "_meta": {
+      "title": "Load SHARP Model"
+    }
+  },
+  "7": {
+    "inputs": {
+      "focal_length_mm": [
+        "9",
+        2
+      ],
+      "output_prefix": "sharp",
+      "model": [
+        "2",
+        0
+      ],
+      "image": [
+        "9",
+        0
+      ]
+    },
+    "class_type": "SharpPredict",
+    "_meta": {
+      "title": "SHARP Predict (Image to PLY)"
+    }
+  },
+  "8": {
+    "inputs": {
+      "preview_gaussian": "",
+      "ply_path": [
+        "7",
+        0
+      ],
+      "extrinsics": [
+        "7",
+        1
+      ],
+      "intrinsics": [
+        "7",
+        2
+      ]
+    },
+    "class_type": "GeomPackPreviewGaussian",
+    "_meta": {
+      "title": "Preview Gaussian"
+    }
+  },
+  "9": {
+    "inputs": {
+      "image": "1770295837973.png",
+      "default_focal_mm": 20
+    },
+    "class_type": "LoadImageWithExif",
+    "_meta": {
+      "title": "Load Image with EXIF (Focal Length)"
+    }
+  }
+}
